@@ -27,3 +27,5 @@ detector = apriltag.Detector(options)
 results = detector.detect(gray)
 print("[INFO] {} total AprilTags detected".format(len(results))) # total number of april tags detected
 
+# Open the video file
+video_capture = cv2.VideoCapture('plantage_shed.mp4')
