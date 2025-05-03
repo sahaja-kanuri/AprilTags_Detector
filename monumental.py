@@ -1,22 +1,18 @@
 import cv2
 import numpy as np
-import apriltag
+# import apriltag
+# from pupil_apriltags import Detector
+import json
 
-def estimate_multiple_tag_positions(video_path):
+def estimate_multiple_tag_positions(video_path, detector, camera_matrix, dist_coeffs, tag_size):
+    # Video capture
+    print("Opening video...")
     cap = cv2.VideoCapture(video_path)
-    detector = apriltag.Detector()
     
-    # Camera parameters (must be calibrated)
-    camera_matrix = np.array([
-        [800, 0, 320],
-        [0, 800, 240],
-        [0, 0, 1]
-    ], dtype=np.float32)
-    dist_coeffs = np.zeros((4, 1))
-    
-    # Store tag observations by frame: {frame_idx: {tag_id: corners}}
+    # Store tag observations by frame: {frame_idx: {tag_id: corners, ...}}
     all_observations = {}
     frame_idx = 0
+    # all_centers = {}
     
     # Collect observations from all frames
     print("Collecting tag observations from video...")
@@ -31,12 +27,23 @@ def estimate_multiple_tag_positions(video_path):
         if len(results) == 0:
             continue
             
-        # Store observations for this frame
+        # Store observations for this frame: {tag_id: corners}, corners are 2D points as numpy arrays
         frame_observations = {}
+        # frame_centers = {}
         for r in results:
             frame_observations[r.tag_id] = np.array(r.corners, dtype=np.float32)
+            # if r.tag_id in (2, 3, 39):
+            #     #TODO: save centers in a new dict maybe
+            #     frame_centers[r.tag_id] = np.array(r.center, dtype=np.float32)
             
         all_observations[frame_idx] = frame_observations
+        # if frame_centers:
+        #     all_centers[frame_idx] = frame_centers
+        
+        if frame_idx == 0:
+            print(f"Detected {len(frame_observations)} tags in frame {frame_idx}")
+            print(f"Printing frame observations for the 0th frame: {all_observations[frame_idx]}")
+
         frame_idx += 1
         
     cap.release()
@@ -52,20 +59,21 @@ def estimate_multiple_tag_positions(video_path):
     print(f"Selected tag {reference_tag_id} as reference")
     
     # Initialize tag positions
-    tag_size = 0.05  # 5cm
-    tag_positions = {}
+    tag_positions = {} # {tag_id: corners}
+    # tag_centers = {} # {tag_id: center} for ids 2, 3, 39
     
     # Set reference tag at origin
     tag_positions[reference_tag_id] = np.array([
-        [-tag_size/2, -tag_size/2, 0],
-        [tag_size/2, -tag_size/2, 0],
-        [tag_size/2, tag_size/2, 0],
-        [-tag_size/2, tag_size/2, 0]
+        [-tag_size/2, -tag_size/2, 0.],
+        [tag_size/2, -tag_size/2, 0.],
+        [tag_size/2, tag_size/2, 0.],
+        [-tag_size/2, tag_size/2, 0.]
     ], dtype=np.float32)
     
     # Estimate other tag positions
     # This is simplified - in practice you'd implement full SfM or bundle adjustment
     tag_position_estimates = []
+    # tag_center_estimates = []
     
     # For each frame where the reference tag is visible
     for frame_idx, frame_obs in all_observations.items():
@@ -133,8 +141,13 @@ def estimate_multiple_tag_positions(video_path):
     
     return tag_positions
 
-# Helper function to convert image point to 3D (same as before)
+# Helper function to convert image point to 3D
 def image_to_world(image_point, camera_matrix, rvec, tvec):
+    """
+    Convert an image point to a 3D point on the tag plane (Z=0)
+    This uses ray-plane intersection
+    """
+
     # Convert rotation vector to rotation matrix
     R, _ = cv2.Rodrigues(rvec)
     
@@ -163,6 +176,9 @@ def image_to_world(image_point, camera_matrix, rvec, tvec):
     plane_point = np.array([0, 0, 0])
     
     # Ray-plane intersection
+    # Line equation: C + t * ray_dir_world
+    # Plane equation: dot(p - plane_point, plane_normal) = 0
+    # Solve for t: dot(C + t * ray_dir_world - plane_point, plane_normal) = 0
     numerator = np.dot(plane_point - C.flatten(), plane_normal)
     denominator = np.dot(ray_dir_world, plane_normal)
     
@@ -173,13 +189,13 @@ def image_to_world(image_point, camera_matrix, rvec, tvec):
     t = numerator / denominator
     
     # Compute 3D point
-    point_3d = C.flatten() + t * ray_dir_world
+    point_3d = C.flatten() + (t * ray_dir_world)
     
     return point_3d
 
-def visualize_tag_positions(video_path, tag_positions, camera_matrix, dist_coeffs):
+def visualize_tag_positions(video_path, detector, tag_positions, camera_matrix, dist_coeffs):
     cap = cv2.VideoCapture(video_path)
-    detector = apriltag.Detector()
+    # detector = Detector()
     
     while cap.isOpened():
         ret, frame = cap.read()
@@ -214,9 +230,31 @@ def visualize_tag_positions(video_path, tag_positions, camera_matrix, dist_coeff
                     cv2.putText(frame, str(r.tag_id), tuple(center), 
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
         
+        cv2.imwrite("Tag_Positions.jpg", frame)
+        # print("Visualization saved as 'Tag_Positions.jpg'")
+
         cv2.imshow('Tag Positions', frame)
+        
         if cv2.waitKey(30) & 0xFF == ord('q'):
             break
     
     cap.release()
     cv2.destroyAllWindows()
+
+def save_tag_positions(tag_positions, filename):
+    # Create a serializable version of tag_positions
+    serializable_tag_positions = []
+    tag_dict = {}
+    
+    for tag_id, corners in tag_positions.items():
+        # Convert NumPy arrays to Python lists
+        tag_dict["id"] = tag_id
+        tag_dict["corners"] = corners.tolist()
+        serializable_tag_positions.append(tag_dict.copy())
+        # serializable_tag_positions[str(tag_id)] = corners.tolist()
+    
+    # Write to JSON file
+    with open(filename, 'w') as f:
+        json.dump(serializable_tag_positions, f, indent=4)
+    
+    print(f"Tag positions saved to {filename}")
