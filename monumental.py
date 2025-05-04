@@ -429,7 +429,7 @@ def estimate_tag_positions_3d(video_path, detector, camera_matrix, dist_coeffs, 
     # Step 6: Validate distance constraints if provided
     validate_distance_constraints(refined_tag_positions, known_constraints, verbose=True)
 
-    return refined_tag_positions
+    return refined_tag_positions, all_observations, reference_tag_id
 
 def validate_distance_constraints(tag_positions, constraints, verbose=True):
     """
@@ -512,8 +512,227 @@ def validate_distance_constraints(tag_positions, constraints, verbose=True):
     
     #return stats
 
+def save_tag_positions(tag_positions, filename):
+    """
+    Save tag positions to a JSON file
+    """
+    # Create a serializable version of tag_positions
+    serializable_tag_positions = []
+    tag_dict = {}
+    
+    for tag_id, corners in tag_positions.items():
+        # Convert NumPy arrays to Python lists
+        tag_dict["id"] = tag_id
+        tag_dict["corners"] = np.round(corners, 2).tolist()
+        serializable_tag_positions.append(tag_dict.copy())
+        # serializable_tag_positions[str(tag_id)] = corners.tolist()
+    
+    # Write to JSON file
+    with open(filename, 'w') as f:
+        json.dump(serializable_tag_positions, f, indent=4)
+    
+    print(f"Tag positions saved to {filename}")
 
-def visualize_tag_positions(video_path, detector, tag_positions, camera_matrix, dist_coeffs):
+import cv2
+import numpy as np
+import json
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+def visualize_tags_3d(tag_positions, reference_tag_id):
+    """
+    Create a 3D visualization of all detected tags
+    
+    Args:
+        tag_positions: Dict mapping tag_id to 3D corner positions
+        reference_tag_id: ID of the reference tag (origin)
+    """
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    
+    # Color map for different tags
+    colors = plt.cm.rainbow(np.linspace(0, 1, len(tag_positions)))
+    
+    # Plot each tag
+    for i, (tag_id, corners) in enumerate(tag_positions.items()):
+        # Create a filled polygon for the tag
+        x = [corner[0] for corner in corners]
+        y = [corner[1] for corner in corners]
+        z = [corner[2] for corner in corners]
+        
+        # Add a fifth point to close the polygon (repeat the first point)
+        x.append(corners[0][0])
+        y.append(corners[0][1])
+        z.append(corners[0][2])
+        
+        # Plot the tag outline
+        if tag_id == reference_tag_id:
+            # Highlight the reference tag with a special color and thicker line
+            ax.plot(x, y, z, color='red', linewidth=3)
+        else:
+            ax.plot(x, y, z, color=colors[i], linewidth=2)
+        
+        # Fill the tag area with a semi-transparent color
+        # Using triangulation to fill the tag area
+        ax.plot_trisurf([x[0], x[1], x[2], x[3]], 
+                        [y[0], y[1], y[2], y[3]], 
+                        [z[0], z[1], z[2], z[3]], 
+                        triangles=[[0,1,2], [0,2,3]],
+                        color='red' if tag_id == reference_tag_id else colors[i], 
+                        alpha=0.6)
+        
+        # Calculate tag center for the tag ID text
+        center_x = sum(x[:-1]) / 4
+        center_y = sum(y[:-1]) / 4
+        center_z = sum(z[:-1]) / 4
+        
+        # Add tag ID text
+        ax.text(center_x, center_y, center_z, str(tag_id), 
+                color='black', fontsize=12, ha='center', va='center')
+    
+    # Draw coordinate axes at the origin (reference tag center)
+    ref_tag_center = np.mean(tag_positions[reference_tag_id], axis=0)
+    
+    # Draw axes lines
+    axis_length = 0.05  # Length of the axes arrows
+    
+    # X-axis (red)
+    ax.quiver(ref_tag_center[0], ref_tag_center[1], ref_tag_center[2], 
+              axis_length, 0, 0, color='red', arrow_length_ratio=0.2)
+    ax.text(ref_tag_center[0] + axis_length*1.2, ref_tag_center[1], ref_tag_center[2], 
+            "X", color='red', fontsize=12)
+    
+    # Y-axis (green)
+    ax.quiver(ref_tag_center[0], ref_tag_center[1], ref_tag_center[2], 
+              0, axis_length, 0, color='green', arrow_length_ratio=0.2)
+    ax.text(ref_tag_center[0], ref_tag_center[1] + axis_length*1.2, ref_tag_center[2], 
+            "Y", color='green', fontsize=12)
+    
+    # Z-axis (blue)
+    ax.quiver(ref_tag_center[0], ref_tag_center[1], ref_tag_center[2], 
+              0, 0, axis_length, color='blue', arrow_length_ratio=0.2)
+    ax.text(ref_tag_center[0], ref_tag_center[1], ref_tag_center[2] + axis_length*1.2, 
+            "Z", color='blue', fontsize=12)
+    
+    # Add a text label for the origin
+    ax.text(ref_tag_center[0], ref_tag_center[1], ref_tag_center[2] - axis_length*1.2, 
+            f"Origin (Tag {reference_tag_id})", 
+            color='black', fontsize=12, ha='center', va='center')
+    
+    # Set labels and title
+    ax.set_xlabel('X (mm)')
+    ax.set_ylabel('Y (mm)')
+    ax.set_zlabel('Z (mm)')
+    ax.set_title(f'3D Visualization of AprilTags (Origin: Tag {reference_tag_id})')
+    
+    # Set equal aspect ratio
+    max_range = max([
+        max(ax.get_xlim()) - min(ax.get_xlim()),
+        max(ax.get_ylim()) - min(ax.get_ylim()),
+        max(ax.get_zlim()) - min(ax.get_zlim())
+    ])
+    mid_x = np.mean(ax.get_xlim())
+    mid_y = np.mean(ax.get_ylim())
+    mid_z = np.mean(ax.get_zlim())
+    ax.set_xlim(mid_x - max_range/2, mid_x + max_range/2)
+    ax.set_ylim(mid_y - max_range/2, mid_y + max_range/2)
+    ax.set_zlim(mid_z - max_range/2, mid_z + max_range/2)
+    
+    # Show and save the figure
+    plt.savefig("tags_3d_visualization.png", dpi=300, bbox_inches='tight')
+    plt.show()
+    
+    print("3D visualization saved as 'tags_3d_visualization.png'")
+
+def visualize_tag_positions(video_path, all_observations, tag_positions, camera_matrix, dist_coeffs, output_path='tag_visualization.mp4'):
+    """
+    Visualize tag positions using existing observations and save the video
+    
+    Args:
+        video_path: Path to the input video
+        all_observations: Dictionary of tag observations by frame
+        tag_positions: Dict mapping tag_id to 3D corner positions
+        camera_matrix: Camera intrinsic matrix
+        dist_coeffs: Distortion coefficients
+        output_path: Path to save the output video
+    """
+    cap = cv2.VideoCapture(video_path)
+    
+    # Get video properties
+    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    
+    # Create VideoWriter object
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_path, fourcc, fps, (frame_width, frame_height))
+    
+    frame_idx = 0
+    
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        # Check if this frame has observations
+        if frame_idx in all_observations:
+            frame_observations = all_observations[frame_idx]
+            
+            # Draw each tag from the saved observations
+            for tag_id, corners in frame_observations.items():
+                # Draw detected corners
+                for i, corner in enumerate(corners):
+                    cv2.circle(frame, (int(corner[0]), int(corner[1])), 5, (0, 255, 0), -1)
+                
+                # Draw tag outline
+                pts = corners.astype(np.int32).reshape((-1, 1, 2))
+                cv2.polylines(frame, [pts], True, (0, 255, 0), 2)
+                
+                # If tag has estimated 3D position
+                if tag_id in tag_positions:
+                    # Solve PnP to get pose
+                    try:
+                        success, rvec, tvec = cv2.solvePnP(
+                            tag_positions[tag_id],
+                            corners,
+                            camera_matrix,
+                            dist_coeffs,
+                            flags=cv2.SOLVEPNP_IPPE
+                        )
+                        
+                        if success:
+                            # Draw axis
+                            cv2.drawFrameAxes(frame, camera_matrix, dist_coeffs, rvec, tvec, 0.03)
+                            
+                            # Display tag ID
+                            center = np.mean(corners, axis=0).astype(int)
+                            cv2.putText(frame, str(tag_id), tuple(center), 
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                    except Exception as e:
+                        print(f"Error visualizing tag {tag_id} in frame {frame_idx}: {e}")
+        
+        # Add frame counter
+        cv2.putText(frame, f"Frame: {frame_idx}", (10, 30), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        
+        # Write frame to output video
+        out.write(frame)
+        
+        # Display frame (optional, can be commented out for faster processing)
+        cv2.imshow('Tag Positions', frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+        
+        frame_idx += 1
+    
+    # Release resources
+    cap.release()
+    out.release()
+    cv2.destroyAllWindows()
+    
+    print(f"Visualization saved to '{output_path}'")
+
+def visualize_tag_positions_old(video_path, detector, tag_positions, camera_matrix, dist_coeffs):
     cap = cv2.VideoCapture(video_path)
     # detector = Detector()
     
@@ -561,24 +780,3 @@ def visualize_tag_positions(video_path, detector, tag_positions, camera_matrix, 
     
     cap.release()
     cv2.destroyAllWindows()
-
-def save_tag_positions(tag_positions, filename):
-    """
-    Save tag positions to a JSON file
-    """
-    # Create a serializable version of tag_positions
-    serializable_tag_positions = []
-    tag_dict = {}
-    
-    for tag_id, corners in tag_positions.items():
-        # Convert NumPy arrays to Python lists
-        tag_dict["id"] = tag_id
-        tag_dict["corners"] = np.round(corners, 2).tolist()
-        serializable_tag_positions.append(tag_dict.copy())
-        # serializable_tag_positions[str(tag_id)] = corners.tolist()
-    
-    # Write to JSON file
-    with open(filename, 'w') as f:
-        json.dump(serializable_tag_positions, f, indent=4)
-    
-    print(f"Tag positions saved to {filename}")

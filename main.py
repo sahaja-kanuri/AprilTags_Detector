@@ -1,12 +1,12 @@
 import numpy as np
 import json 
 import time
-time_import = time.time()
-print("Starting AprilTag import...")
+# time_import = time.time()
+# print("Starting AprilTag import...")
 from pupil_apriltags import Detector
-print("AprilTag import successful.")
-print(f"Time taken to import AprilTag: {time.time() - time_import} seconds")
-from monumental import estimate_tag_positions_3d, visualize_tag_positions, save_tag_positions
+# print("AprilTag import successful.")
+# print(f"Time taken to import AprilTag: {time.time() - time_import} seconds")
+from monumental import estimate_tag_positions_3d, visualize_tag_positions, save_tag_positions, visualize_tags_3d, visualize_tag_positions_old
 
 video_path = "plantage_shed.mp4"
 
@@ -51,14 +51,23 @@ constraints = [
     (3, 39, 1940)    # Distance between tags 3 and 39 is 1940mm
 ]
 
-tag_positions = estimate_tag_positions_3d(video_path, detector, camera_matrix, dist_coeffs, tag_size,
-                                          known_constraints=constraints) 
+def main():
+    tag_positions, all_observations, reference_tag_id = estimate_tag_positions_3d(video_path, 
+                                                                                  detector, 
+                                                                                  camera_matrix, 
+                                                                                  dist_coeffs, 
+                                                                                  tag_size,
+                                                                                  known_constraints=constraints) 
 
-if tag_positions:
-    # Save results to JSON file
-    save_tag_positions(tag_positions, "AprilTag_coordinates.json")
-    
-    # Visualize tags in 3D
-    visualize_tag_positions(video_path, detector, tag_positions, camera_matrix, dist_coeffs)
+    if tag_positions:
+        # Save results to JSON file
+        save_tag_positions(tag_positions, "AprilTag_coordinates.json")
+        
+        # Visualize tags in 3D
+        visualize_tags_3d(tag_positions, reference_tag_id)
+        # visualize_tag_positions(video_path, all_observations, tag_positions, camera_matrix, dist_coeffs)
+        visualize_tag_positions_old(video_path, detector, tag_positions, camera_matrix, dist_coeffs)
+    print("All done! Tag positions have been estimated and saved.")
 
-print("All done! Tag positions have been estimated and saved.")
+if __name__ == "__main__":
+    main()
