@@ -1,12 +1,9 @@
 import numpy as np
 import json 
 import time
-# time_import = time.time()
-# print("Starting AprilTag import...")
 from pupil_apriltags import Detector
-# print("AprilTag import successful.")
-# print(f"Time taken to import AprilTag: {time.time() - time_import} seconds")
-from monumental import estimate_tag_positions_3d, visualize_tag_positions, save_tag_positions, visualize_tags_3d, visualize_tag_positions_old
+from monumental import estimate_tag_positions_3d, save_tag_positions
+from visualization import visualize_tag_positions, visualize_tags_3d, visualize_tag_positions_old
 
 video_path = "plantage_shed.mp4"
 
@@ -27,6 +24,7 @@ camera_matrix = np.array([
 
 tag_size = 42. # in mm
 
+# Initialize AprilTag detector
 print("Loading Detector...")
 time_detector = time.time()
 detector = Detector(
@@ -35,7 +33,6 @@ detector = Detector(
         )
 print(f"Time taken to load detector: {time.time() - time_detector} seconds")
 
-# Initialize AprilTag detector
 # detector = Detector(
 #     families='tagStandard52h13',  # Tag family to use
 #     nthreads=4,           # Number of threads
@@ -61,7 +58,7 @@ def main():
         save_tag_positions(tag_positions, "AprilTag_coordinates.json")
         
         # Visualize tags in 3D
-        visualize_tags_3d(tag_positions, reference_tag_id, constraints)
+        visualize_tags_3d(tag_positions, reference_tag_id, constraints, save_path="tag_visualization.png")
         # visualize_tag_positions(video_path, all_observations, tag_positions, camera_matrix, dist_coeffs)
         visualize_tag_positions_old(video_path, detector, tag_positions, camera_matrix, dist_coeffs)
     print("All done! Tag positions have been estimated and saved.")
