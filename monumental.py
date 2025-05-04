@@ -5,6 +5,8 @@ import numpy as np
 import json
 # from concurrent.futures import ThreadPoolExecutor
 from scipy.optimize import least_squares
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 def collect_tag_observations(video_path, detector, frame_interval=10):
     print("Opening video...")
@@ -533,12 +535,6 @@ def save_tag_positions(tag_positions, filename):
     
     print(f"Tag positions saved to {filename}")
 
-import cv2
-import numpy as np
-import json
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-
 def visualize_tags_3d(tag_positions, reference_tag_id):
     """
     Create a 3D visualization of all detected tags
@@ -640,7 +636,7 @@ def visualize_tags_3d(tag_positions, reference_tag_id):
     
     # Show and save the figure
     plt.savefig("tags_3d_visualization.png", dpi=300, bbox_inches='tight')
-    plt.show()
+    # plt.show()
     
     print("3D visualization saved as 'tags_3d_visualization.png'")
 
