@@ -52,19 +52,16 @@ constraints = [
 ]
 
 def main():
-    tag_positions, all_observations, reference_tag_id = estimate_tag_positions_3d(video_path, 
-                                                                                  detector, 
-                                                                                  camera_matrix, 
-                                                                                  dist_coeffs, 
-                                                                                  tag_size,
-                                                                                  known_constraints=constraints) 
+    tag_positions, all_observations, reference_tag_id = estimate_tag_positions_3d(
+        video_path, detector, camera_matrix, dist_coeffs, tag_size, known_constraints=constraints
+        ) 
 
     if tag_positions:
         # Save results to JSON file
         save_tag_positions(tag_positions, "AprilTag_coordinates.json")
         
         # Visualize tags in 3D
-        visualize_tags_3d(tag_positions, reference_tag_id)
+        visualize_tags_3d(tag_positions, reference_tag_id, constraints)
         # visualize_tag_positions(video_path, all_observations, tag_positions, camera_matrix, dist_coeffs)
         visualize_tag_positions_old(video_path, detector, tag_positions, camera_matrix, dist_coeffs)
     print("All done! Tag positions have been estimated and saved.")

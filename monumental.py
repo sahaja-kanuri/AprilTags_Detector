@@ -535,110 +535,92 @@ def save_tag_positions(tag_positions, filename):
     
     print(f"Tag positions saved to {filename}")
 
-def visualize_tags_3d(tag_positions, reference_tag_id):
+def visualize_tags_3d(tag_positions, reference_tag_id, constraints):
     """
-    Create a 3D visualization of all detected tags
+    Create an interactive 3D visualization of AprilTags
+    that allows for dragging and rotating the view
     
     Args:
         tag_positions: Dict mapping tag_id to 3D corner positions
         reference_tag_id: ID of the reference tag (origin)
+        constraints: List of tuples (tag_id1, tag_id2, distance) representing distance constraints
     """
+    
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection='3d')
     
-    # Color map for different tags
-    colors = plt.cm.rainbow(np.linspace(0, 1, len(tag_positions)))
+    # Store tag centers for constraint lines
+    tag_centers = {}
     
     # Plot each tag
-    for i, (tag_id, corners) in enumerate(tag_positions.items()):
-        # Create a filled polygon for the tag
+    for tag_id, corners in tag_positions.items():
+        # Extract coordinates
         x = [corner[0] for corner in corners]
-        y = [corner[1] for corner in corners]
-        z = [corner[2] for corner in corners]
+        y = [corner[2] for corner in corners]  # y is depth
+        z = [corner[1] for corner in corners]
         
-        # Add a fifth point to close the polygon (repeat the first point)
-        x.append(corners[0][0])
-        y.append(corners[0][1])
-        z.append(corners[0][2])
+        # Determine color based on whether this is the reference tag
+        tag_color = 'red' if tag_id == reference_tag_id else 'blue'
         
-        # Plot the tag outline
-        if tag_id == reference_tag_id:
-            # Highlight the reference tag with a special color and thicker line
-            ax.plot(x, y, z, color='red', linewidth=3)
-        else:
-            ax.plot(x, y, z, color=colors[i], linewidth=2)
+        # Plot the edges (square outline)
+        for i in range(4):
+            next_i = (i + 1) % 4
+            ax.plot([x[i], x[next_i]], [y[i], y[next_i]], [z[i], z[next_i]], 
+                    color=tag_color, linewidth=2)
         
-        # Fill the tag area with a semi-transparent color
-        # Using triangulation to fill the tag area
-        ax.plot_trisurf([x[0], x[1], x[2], x[3]], 
-                        [y[0], y[1], y[2], y[3]], 
-                        [z[0], z[1], z[2], z[3]], 
-                        triangles=[[0,1,2], [0,2,3]],
-                        color='red' if tag_id == reference_tag_id else colors[i], 
-                        alpha=0.6)
+        # Plot the diagonals
+        ax.plot([x[0], x[2]], [y[0], y[2]], [z[0], z[2]], color=tag_color, linewidth=1.5)
+        ax.plot([x[1], x[3]], [y[1], y[3]], [z[1], z[3]], color=tag_color, linewidth=1.5)
         
-        # Calculate tag center for the tag ID text
-        center_x = sum(x[:-1]) / 4
-        center_y = sum(y[:-1]) / 4
-        center_z = sum(z[:-1]) / 4
+        # Calculate tag center
+        center_x = sum(x) / 4
+        center_y = sum(y) / 4
+        center_z = sum(z) / 4
         
-        # Add tag ID text
-        ax.text(center_x, center_y, center_z, str(tag_id), 
-                color='black', fontsize=12, ha='center', va='center')
+        # Store center for constraint lines
+        tag_centers[tag_id] = (center_x, center_y, center_z)
+        
+        # Add tag ID text to the left of the tag
+        ax.text(center_x - 0.02, center_y, center_z, str(tag_id), 
+                color='black', fontsize=12)
     
-    # Draw coordinate axes at the origin (reference tag center)
-    ref_tag_center = np.mean(tag_positions[reference_tag_id], axis=0)
+    # Draw constraint lines (orange L shape)
+    if constraints:
+        # Draw lines between constrained tags
+        for tag_id1, tag_id2, distance in constraints:
+            if tag_id1 in tag_centers and tag_id2 in tag_centers:
+                center1 = tag_centers[tag_id1]
+                center2 = tag_centers[tag_id2]
+                
+                # Draw orange line connecting the tag centers
+                ax.plot([center1[0], center2[0]], [center1[1], center2[1]], [center1[2], center2[2]], 
+                        color='orange', linewidth=2, linestyle='-')
+                
+                # Calculate midpoint for distance label
+                mid_x = (center1[0] + center2[0]) / 2
+                mid_y = (center1[1] + center2[1]) / 2
+                mid_z = (center1[2] + center2[2]) / 2
+                
+                # Add distance text
+                ax.text(mid_x, mid_y, mid_z, f"{distance}mm", 
+                        color='orange', fontsize=10, ha='center')
     
-    # Draw axes lines
-    axis_length = 0.05  # Length of the axes arrows
-    
-    # X-axis (red)
-    ax.quiver(ref_tag_center[0], ref_tag_center[1], ref_tag_center[2], 
-              axis_length, 0, 0, color='red', arrow_length_ratio=0.2)
-    ax.text(ref_tag_center[0] + axis_length*1.2, ref_tag_center[1], ref_tag_center[2], 
-            "X", color='red', fontsize=12)
-    
-    # Y-axis (green)
-    ax.quiver(ref_tag_center[0], ref_tag_center[1], ref_tag_center[2], 
-              0, axis_length, 0, color='green', arrow_length_ratio=0.2)
-    ax.text(ref_tag_center[0], ref_tag_center[1] + axis_length*1.2, ref_tag_center[2], 
-            "Y", color='green', fontsize=12)
-    
-    # Z-axis (blue)
-    ax.quiver(ref_tag_center[0], ref_tag_center[1], ref_tag_center[2], 
-              0, 0, axis_length, color='blue', arrow_length_ratio=0.2)
-    ax.text(ref_tag_center[0], ref_tag_center[1], ref_tag_center[2] + axis_length*1.2, 
-            "Z", color='blue', fontsize=12)
-    
-    # Add a text label for the origin
-    ax.text(ref_tag_center[0], ref_tag_center[1], ref_tag_center[2] - axis_length*1.2, 
-            f"Origin (Tag {reference_tag_id})", 
-            color='black', fontsize=12, ha='center', va='center')
-    
-    # Set labels and title
+    # Set labels
     ax.set_xlabel('X (mm)')
-    ax.set_ylabel('Y (mm)')
-    ax.set_zlabel('Z (mm)')
-    ax.set_title(f'3D Visualization of AprilTags (Origin: Tag {reference_tag_id})')
+    ax.set_ylabel('Z (mm) - Depth')
+    ax.set_zlabel('Y (mm)')
     
-    # Set equal aspect ratio
-    max_range = max([
-        max(ax.get_xlim()) - min(ax.get_xlim()),
-        max(ax.get_ylim()) - min(ax.get_ylim()),
-        max(ax.get_zlim()) - min(ax.get_zlim())
-    ])
-    mid_x = np.mean(ax.get_xlim())
-    mid_y = np.mean(ax.get_ylim())
-    mid_z = np.mean(ax.get_zlim())
-    ax.set_xlim(mid_x - max_range/2, mid_x + max_range/2)
-    ax.set_ylim(mid_y - max_range/2, mid_y + max_range/2)
-    ax.set_zlim(mid_z - max_range/2, mid_z + max_range/2)
+    # Set an initial view
+    ax.view_init(elev=15, azim=-100)
     
-    # Show and save the figure
-    plt.savefig("tags_3d_visualization.png", dpi=300, bbox_inches='tight')
-    # plt.show()
+    # Turn off the grid for cleaner visualization
+    ax.grid(False)
     
-    print("3D visualization saved as 'tags_3d_visualization.png'")
+    # Enable tight layout
+    plt.tight_layout()
+    
+    # Make the plot interactive - allows for dragging to rotate
+    plt.show()
 
 def visualize_tag_positions(video_path, all_observations, tag_positions, camera_matrix, dist_coeffs, output_path='tag_visualization.mp4'):
     """
