@@ -2,7 +2,7 @@ import numpy as np
 import json 
 import time
 from pupil_apriltags import Detector
-from monumental import estimate_tag_positions_3d, save_tag_positions
+from model import estimate_tag_positions_3d, save_tag_positions
 from visualization import visualize_tag_positions, visualize_tags_3d, visualize_tag_positions_old
 
 video_path = "plantage_shed.mp4"
