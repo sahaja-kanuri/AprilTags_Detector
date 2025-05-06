@@ -1,4 +1,4 @@
-Monumental Computer Vision Assignment 
+Computer Vision Model
 
 <pre><code>
 pip install pupil-apriltags 
