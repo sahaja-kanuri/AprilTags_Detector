@@ -18,10 +18,6 @@ def estimate_tag_positions_3d(video_path, detector, camera_matrix, dist_coeffs, 
 
     # Step 3: Initialize reference tag at origin
     tag_positions = initialize_reference_tag(reference_tag_id, tag_size)
-
-    # old Step 4: Estimate other tag positions (simple version)
-    # tag_positions = estimateAndAverage_other_tag_positions(all_observations, reference_tag_id, 
-    #                                                        tag_positions, camera_matrix, dist_coeffs)
     
     # Step 4: Triangulate positions of other tags
     print("Triangulating tag positions...")
