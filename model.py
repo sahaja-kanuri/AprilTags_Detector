@@ -9,7 +9,23 @@ from scipy.optimize import least_squares
 def estimate_tag_positions_3d(video_path, detector, camera_matrix, dist_coeffs, tag_size, known_constraints=None):
     """
     Main function to estimate 3D positions of AprilTags in a video. Utilizes the functions below
+    
+    Args:
+        video_path (str): Path to the video file containing AprilTag footage
+        detector (Detector): Initialized AprilTag detector object
+        camera_matrix (numpy.ndarray): 3x3 camera intrinsic matrix
+        dist_coeffs (numpy.ndarray): Camera distortion coefficients
+        tag_size (float): Physical size of the AprilTag in mm
+        known_constraints (list, optional): List of distance constraints between tags, 
+                                           each tuple contains (tag_id1, tag_id2, distance_mm)
+    
+    Returns:
+        tuple: (refined_tag_positions, all_observations, reference_tag_id)
+            - refined_tag_positions (dict): Dict mapping tag_id to 3D corner positions after optimization
+            - all_observations (dict): Dict mapping frame indices to tag observations
+            - reference_tag_id (int): ID of the reference tag used as origin
     """
+
     # Step 1: Collect observations from all frames
     all_observations = collect_tag_observations(video_path, detector)
     
@@ -43,6 +59,20 @@ def estimate_tag_positions_3d(video_path, detector, camera_matrix, dist_coeffs, 
     return refined_tag_positions, all_observations, reference_tag_id
 
 def collect_tag_observations(video_path, detector, frame_interval=10):
+    """
+    Processes the video to detect AprilTags in frames and collects observations
+    
+    Args:
+        video_path (str): Path to the video file to process
+        detector (Detector): Initialized AprilTag detector object
+        frame_interval (int, optional): Process every Nth frame to reduce computation
+    
+    Returns:
+        dict: Dictionary mapping frame indices to tag observations
+              Format: {frame_idx: {tag_id: corners, ...}, ...}
+              where corners are 2D points as numpy arrays
+    """
+
     print("Opening video...")
     cap = cv2.VideoCapture(video_path)
 
@@ -104,6 +134,17 @@ def collect_tag_observations(video_path, detector, frame_interval=10):
     return all_observations
 
 def find_reference_tag(all_observations):
+    """
+    Identifies the most frequently observed tag to use as reference point/origin
+    
+    Args:
+        all_observations (dict): Dictionary of tag observations by frame
+                               Format: {frame_idx: {tag_id: corners, ...}, ...}
+    
+    Returns:
+        int: ID of the tag that appears most frequently in the video
+    """
+
     # Choose reference tag (most frequently observed)
     tag_counts = {}
     for frame_obs in all_observations.values():
@@ -116,6 +157,18 @@ def find_reference_tag(all_observations):
     return reference_tag_id
 
 def initialize_reference_tag(reference_tag_id, tag_size):
+    """
+    Initializes the 3D position of the reference tag, placing it at the origin
+    
+    Args:
+        reference_tag_id (int): ID of the tag to use as reference/origin
+        tag_size (float): Physical size of the AprilTag in mm
+    
+    Returns:
+        dict: Dictionary mapping the reference tag ID to its 3D corner positions
+              with the tag centered at the origin and lying on the XY plane
+    """
+
     # AprilTag corners are typically defined as:
     # - Bottom left, bottom right, top right, top left (clockwise from bottom left)
     # - In the tag's coordinate system, z=0 for all corners (tag is flat)
@@ -136,8 +189,19 @@ def initialize_reference_tag(reference_tag_id, tag_size):
 
 def triangulate_tag_positions(all_observations, reference_tag_id, tag_positions, camera_matrix, dist_coeffs):
     """
-    Triangulate positions of all tags using multiple views
+    Triangulates positions of all tags using multiple views of the reference tag
+    
+    Args:
+        all_observations (dict): Dictionary of tag observations by frame
+        reference_tag_id (int): ID of the reference tag
+        tag_positions (dict): Dictionary of initialized tag positions (only contains reference tag)
+        camera_matrix (numpy.ndarray): 3x3 camera intrinsic matrix
+        dist_coeffs (numpy.ndarray): Camera distortion coefficients
+    
+    Returns:
+        dict: Updated dictionary mapping tag IDs to their estimated 3D corner positions
     """
+
     # Initialize a dictionary to collect observations for each tag
     tag_observations = {}
 
@@ -226,15 +290,16 @@ def triangulate_tag_positions(all_observations, reference_tag_id, tag_positions,
 
 def triangulate_point_dlt(img_points, proj_matrices):
     """
-    Triangulate a 3D point from multiple 2D points using Direct Linear Transform
+    Triangulates a 3D point from multiple 2D observations using Direct Linear Transform
     
     Args:
-        img_points: List of 2D points in multiple images
-        proj_matrices: List of 3x4 projection matrices for each view
+        img_points (numpy.ndarray): 2D points in multiple images
+        proj_matrices (numpy.ndarray): Projection matrices for each view
     
     Returns:
-        3D point coordinates
+        numpy.ndarray: 3D point coordinates
     """
+
     n_views = len(img_points)
     A = np.zeros((2 * n_views, 4))
     
@@ -261,11 +326,27 @@ def triangulate_point_dlt(img_points, proj_matrices):
     
     return point_3d[:3]
 
-def optimize_tag_positions(all_observations, initial_tag_positions, camera_matrix, 
-                           dist_coeffs, reference_tag_id, constraints=None):
+def optimize_tag_positions(
+        all_observations, initial_tag_positions, camera_matrix, 
+        dist_coeffs, reference_tag_id, constraints=None
+        ):
     """
-    Optimize tag positions using bundle adjustment
+    Optimizes tag positions using bundle adjustment to minimize reprojection errors
+    and enforce distance constraints
+    
+    Args:
+        all_observations (dict): Dictionary of tag observations by frame
+        initial_tag_positions (dict): Initial estimates of tag 3D positions
+        camera_matrix (numpy.ndarray): 3x3 camera intrinsic matrix
+        dist_coeffs (numpy.ndarray): Camera distortion coefficients
+        reference_tag_id (int): ID of the reference tag (will remain fixed)
+        constraints (list, optional): List of tuples (tag_id1, tag_id2, distance_mm)
+                                     representing known distances between tag centers
+    
+    Returns:
+        dict: Optimized tag positions mapping tag IDs to their refined 3D corner positions
     """
+
     # Use empty list if no constraints provided
     if constraints is None:
         constraints = []
@@ -416,16 +497,18 @@ def optimize_tag_positions(all_observations, initial_tag_positions, camera_matri
 
 def validate_distance_constraints(tag_positions, constraints, verbose=True):
     """
-    Validate how well the optimized tag positions match the expected distances
+    Validates how well the optimized tag positions match the expected distances
     
     Args:
-        tag_positions: Dict mapping tag_id to 3D corner positions
-        constraints: List of tuples (tag_id1, tag_id2, distance_mm)
-        verbose: Whether to print detailed information
-        
+        tag_positions (dict): Dictionary mapping tag IDs to their 3D corner positions
+        constraints (list): List of tuples (tag_id1, tag_id2, distance_mm)
+                          representing expected distances between tag centers
+        verbose (bool): Whether to print detailed validation information
+    
     Returns:
-        dict: Statistics about distance errors
+        dict: Statistics about distance errors (if verbose=False, otherwise None)
     """
+
     # Initialize statistics
     stats = {
         'num_constraints': len(constraints),
@@ -497,8 +580,16 @@ def validate_distance_constraints(tag_positions, constraints, verbose=True):
 
 def save_tag_positions(tag_positions, filename):
     """
-    Save tag positions to a JSON file
+    Saves the estimated 3D tag positions to a JSON file
+    
+    Args:
+        tag_positions (dict): Dictionary mapping tag IDs to their 3D corner positions
+        filename (str): Path to save the JSON file
+    
+    Returns:
+        None: Writes the data to the specified file
     """
+    
     # Create a serializable version of tag_positions
     serializable_tag_positions = []
     tag_dict = {}
