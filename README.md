@@ -18,6 +18,16 @@ The Tag positions get saved in the `apriltag_coordinates.json` file.
 
 ## Setup
 
+Bash script that installs all necessary dependencies and runs the main script:
+
+<pre><code>
+$ bash run.sh
+</code></pre>
+
+OR
+
+Run these commands in the terminal:
+
 <pre><code>
 $ python3 -m venv aprilTags
 $ source aprilTags/bin/activate
