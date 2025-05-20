@@ -6,7 +6,6 @@ import json
 # from concurrent.futures import ThreadPoolExecutor
 from scipy.optimize import least_squares
 
-
 def estimate_tag_positions_3d(video_path, detector, camera_matrix, dist_coeffs, tag_size, known_constraints=None):
     """
     Main function to estimate 3D positions of AprilTags in a video. Utilizes the functions below
@@ -30,11 +29,10 @@ def estimate_tag_positions_3d(video_path, detector, camera_matrix, dist_coeffs, 
         all_observations, reference_tag_id, tag_positions, camera_matrix, dist_coeffs
     )
     
-    # # Step 5: Optimize tag positions with bundle adjustment
+    # Step 5: Optimize tag positions with bundle adjustment with distance constraints
     print("Optimizing tag positions with bundle adjustment...")
     refined_tag_positions = optimize_tag_positions(
-        all_observations, tag_positions, camera_matrix, dist_coeffs, 
-        reference_tag_id, known_constraints
+        all_observations, tag_positions, camera_matrix, dist_coeffs, reference_tag_id, known_constraints
     )
 
     # Output the results
@@ -42,10 +40,6 @@ def estimate_tag_positions_3d(video_path, detector, camera_matrix, dist_coeffs, 
         print(f"Tag {tag_id} corners:")
         for i, corner in enumerate(corners):
             print(f"  Corner {i}: {corner}")
-    
-    # # Step 6: Apply distance constraints if provided
-    # if known_constraints:
-    #     refined_tag_positions = apply_distance_constraints(refined_tag_positions, known_constraints)
     
     # Step 6: Validate distance constraints if provided
     validate_distance_constraints(refined_tag_positions, known_constraints, verbose=True)
@@ -282,16 +276,6 @@ def optimize_tag_positions(all_observations, initial_tag_positions, camera_matri
 
     # Extract all tag IDs
     tag_ids = list(initial_tag_positions.keys())
-
-    # # Check if reference_tag_id is the first tag in tag_ids
-    # if tag_ids[0] != reference_tag_id:
-    #     print(f"CAUTION: Reference tag {reference_tag_id} is not the first tag in the list {tag_ids}")
-    #     print(f"Reordering tag_ids to ensure reference tag is first")
-        
-    #     # Reorder tag_ids to ensure reference_tag_id is first
-    #     if reference_tag_id in tag_ids:
-    #         tag_ids.remove(reference_tag_id)
-    #         tag_ids.insert(0, reference_tag_id)
 
     # Remove reference tag from optimization parameters
     if reference_tag_id in tag_ids:
